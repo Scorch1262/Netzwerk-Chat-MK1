@@ -1,7 +1,7 @@
 name: EXE bauen und Release erzeugen
 
 # Release auslösen:
-#   a) Tag pushen:            git tag v1.1.0 && git push origin v1.1.0
+#   a) Tag pushen:            git tag v1.2.0 && git push origin v1.2.0
 #   b) oder in GitHub unter Actions -> "EXE bauen und Release erzeugen" -> Run workflow (Version eingeben)
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version ohne v (z. B. 1.1.0) - muss zu VERSION in netzwerk_chat.py passen"
+        description: "Version ohne v (z. B. 1.2.0) - muss zu VERSION in netzwerk_chat.py passen"
         required: true
 
 permissions:
@@ -73,7 +73,7 @@ jobs:
 
             `NetzwerkChat.exe` auf **einem** Rechner im Netzwerk starten (keine Installation nötig),
             alle anderen öffnen `http://SERVERNAME:8090` im Browser.
-            Chats sind Ende-zu-Ende-verschlüsselt - der Server kann sie nicht lesen.
+            Chats werden verschlüsselt gespeichert und beim Neustart des Programms verworfen.
           files: |
             dist/NetzwerkChat.exe
             NetzwerkChat-v${{ steps.ver.outputs.version }}-windows.zip
