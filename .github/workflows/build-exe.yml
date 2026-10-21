@@ -1,0 +1,79 @@
+name: EXE bauen und Release erzeugen
+
+# Release auslösen:
+#   a) Tag pushen:            git tag v1.1.0 && git push origin v1.1.0
+#   b) oder in GitHub unter Actions -> "EXE bauen und Release erzeugen" -> Run workflow (Version eingeben)
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version ohne v (z. B. 1.1.0) - muss zu VERSION in netzwerk_chat.py passen"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Code holen
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version bestimmen und prüfen
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME}"
+          fi
+          V="${V#v}"
+          CODE_V=$(grep -m1 '^VERSION = ' netzwerk_chat.py | sed -E 's/VERSION = "([^"]+)"/\1/')
+          if [ "$V" != "$CODE_V" ]; then
+            echo "::error::Version $V passt nicht zu VERSION = \"$CODE_V\" in netzwerk_chat.py"
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: PyInstaller installieren
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: EXE bauen
+        run: pyinstaller --onefile --console --clean --name NetzwerkChat netzwerk_chat.py
+
+      - name: Kurztest der EXE
+        shell: pwsh
+        run: dist\NetzwerkChat.exe --help
+
+      - name: ZIP packen
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          Compress-Archive -Path dist\NetzwerkChat.exe, README.md -DestinationPath "NetzwerkChat-v$v-windows.zip"
+
+      - name: Release erzeugen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Netzwerk-Chat v${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          body: |
+            **Netzwerk-Chat v${{ steps.ver.outputs.version }}**
+
+            `NetzwerkChat.exe` auf **einem** Rechner im Netzwerk starten (keine Installation nötig),
+            alle anderen öffnen `http://SERVERNAME:8090` im Browser.
+            Chats sind Ende-zu-Ende-verschlüsselt - der Server kann sie nicht lesen.
+          files: |
+            dist/NetzwerkChat.exe
+            NetzwerkChat-v${{ steps.ver.outputs.version }}-windows.zip

@@ -1,0 +1,7 @@
+*.db
+*.db-wal
+*.db-shm
+build/
+dist/
+*.spec
+__pycache__/
