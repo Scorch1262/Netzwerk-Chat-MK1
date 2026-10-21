@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Netzwerk-Chat  -  v1.2.1
+Netzwerk-Chat  -  v1.3.0
 
 Lokaler Netzwerk-Chat als Website. Läuft auf EINEM Rechner im Netzwerk,
 alle anderen öffnen nur die Seite im Browser (keine Installation).
 
 - Anmeldung automatisch über den Windows-Benutzer (integrierte Windows-
   Anmeldung / NTLM - derselbe Name, den "whoami" liefert)
+  Firefox: einmalige Freigabe per /firefox-einrichten.reg (wird vom Server
+  passend erzeugt und auf der Anmeldeseite angeboten)
 - Live-Anzeige, wer die Seite gerade geöffnet hat (online / offline)
 - Chatverlauf je Person wird verschlüsselt in SQLite gespeichert und beim
   erneuten Öffnen automatisch wiederhergestellt. Der Schlüssel liegt nur im
@@ -37,7 +39,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 
 # --------------------------------------------------------------------------
 # Einstellungen (per Kommandozeile überschreibbar)
@@ -402,6 +404,38 @@ class Handler(BaseHTTPRequestHandler):
         return ("Set-Cookie", "%s=%s; Path=/; Max-Age=%d; HttpOnly; SameSite=Lax"
                 % (COOKIE_NAME, token, CFG["session_days"] * 86400))
 
+    def _is_firefox(self):
+        return "Firefox/" in (self.headers.get("User-Agent") or "")
+
+    def _request_host(self):
+        host = (self.headers.get("Host") or "").strip()
+        if host.startswith("["):                     # IPv6 [::1]:port
+            return host.split("]")[0] + "]"
+        return host.rsplit(":", 1)[0] if ":" in host else host
+
+    def firefox_reg(self):
+        """Registry-Datei: Firefox darf die Windows-Anmeldung (NTLM) an diesen Server senden.
+
+        Schreibt Firefox-Richtlinien nach HKEY_CURRENT_USER (keine Adminrechte nötig).
+        """
+        hosts = []
+        for h in (self._request_host(), socket.gethostname().split(".")[0], socket.getfqdn()):
+            h = (h or "").strip().lower()
+            if h and h not in hosts and h not in ("localhost", "localhost.localdomain"):
+                hosts.append(h)
+        lines = ["Windows Registry Editor Version 5.00", "",
+                 "; Netzwerk-Chat v%s - Firefox: automatische Windows-Anmeldung freischalten" % VERSION,
+                 "; Erlaubt Firefox, den Windows-Benutzernamen an diese Adresse(n) zu senden.",
+                 "; Danach Firefox einmal komplett schliessen und neu starten.", "",
+                 r"[HKEY_CURRENT_USER\Software\Policies\Mozilla\Firefox\Authentication\NTLM]"]
+        for i, h in enumerate(hosts, 1):
+            lines.append('"%d"="%s"' % (i, h.replace("\\", "").replace('"', "")))
+        lines += ["", r"[HKEY_CURRENT_USER\Software\Policies\Mozilla\Firefox\Authentication\AllowNonFQDN]",
+                  '"NTLM"=dword:00000001', ""]
+        body = "\ufeff".encode("utf-16-le") + "\r\n".join(lines).encode("utf-16-le")
+        self._send(200, body, "application/octet-stream",
+                   [("Content-Disposition", 'attachment; filename="netzwerk-chat-firefox.reg"')])
+
     def _client_host(self):
         ip = self.client_address[0]
         try:
@@ -419,6 +453,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, FAVICON, "image/svg+xml")
         if url.path == "/favicon.ico":
             return self._send(204)
+        if url.path == "/firefox-einrichten.reg":
+            return self.firefox_reg()
         user = self._session_user()
         if not user:
             return self._json({"error": "nicht angemeldet"}, 401)
@@ -478,11 +514,11 @@ class Handler(BaseHTTPRequestHandler):
                     token = STORE.create_session(uid)
                     return self._send(200, APP_HTML, "text/html; charset=utf-8", [self._cookie(token)])
             # anonym / unlesbar -> Ersatzanmeldung ohne erneute Abfrage
-            return self._send(200, login_html(), "text/html; charset=utf-8")
+            return self._send(200, login_html(firefox=self._is_firefox()), "text/html; charset=utf-8")
 
         # Browser zur Windows-Anmeldung auffordern. Kann er das nicht (oder bricht
         # der Benutzer einen Dialog ab), zeigt er den Inhalt dieser Antwort an.
-        return self._send(401, login_html(), "text/html; charset=utf-8",
+        return self._send(401, login_html(firefox=self._is_firefox()), "text/html; charset=utf-8",
                           [("WWW-Authenticate", "NTLM")])
 
     def form_login(self, body):
@@ -490,7 +526,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(403, "Manuelle Anmeldung ist deaktiviert.")
         name = (parse_qs(body.decode("utf-8", "replace")).get("name") or [""])[0].strip()
         if not (1 <= len(name) <= 40) or any(ord(c) < 32 for c in name) or "\\" in name:
-            return self._send(400, login_html("Bitte einen gültigen Namen (1–40 Zeichen) eingeben."),
+            return self._send(400, login_html("Bitte einen gültigen Namen (1–40 Zeichen) eingeben.", self._is_firefox()),
                               "text/html; charset=utf-8")
         uid = login_user(name, "", self._client_host())
         token = STORE.create_session(uid)
@@ -959,37 +995,60 @@ loadUsers().then(connect).catch(e => showErr(e.message));
 """).replace("__VERSION__", VERSION)
 
 
-def login_html(error=""):
+def login_html(error="", firefox=False):
     if CFG["manual_login"]:
         form = """
       <p>Die automatische Anmeldung über den Windows-Benutzer war in diesem Browser nicht möglich.
          Du kannst stattdessen einen Namen eingeben.</p>
       <form method="post" action="/anmelden">
-        <input class="field" name="name" maxlength="40" placeholder="Windows-Benutzername" autofocus required>
+        <input class="field" name="name" maxlength="40" placeholder="Windows-Benutzername" %s required>
         <button class="btn" type="submit">Betreten</button>
-      </form>"""
+      </form>""" % ("" if firefox else "autofocus")
     else:
         form = """
       <p>Die automatische Anmeldung über den Windows-Benutzer war in diesem Browser nicht möglich.</p>"""
+    ff = """
+      <div class="ff">
+        <div class="ff-h">FIREFOX · EINMALIG FREISCHALTEN</div>
+        <p>Firefox sendet den Windows-Benutzer erst, wenn diese Adresse freigegeben ist.
+           Einmal pro PC/Benutzer – danach meldet Firefox dich automatisch an.</p>
+        <ol>
+          <li><a class="btn dl" href="/firefox-einrichten.reg">Freigabe herunterladen</a></li>
+          <li>Datei <code>netzwerk-chat-firefox.reg</code> doppelklicken → <b>Ja</b> → <b>OK</b>
+              <span class="small">(keine Adminrechte nötig)</span></li>
+          <li>Firefox komplett schließen und neu starten.</li>
+        </ol>
+      </div>""" if firefox else ""
     err = '<div class="err">%s</div>' % error if error else ""
+    hint = ("""<div class="hint">Erscheint ein Anmeldefenster: <b>Abbrechen</b> – dann kommt diese Seite.
+Die Adresse immer über den <b>Rechnernamen</b> aufrufen (z.&nbsp;B. <code>http://SERVERNAME:%d</code>).</div>"""
+            if firefox else
+            """<div class="hint">Tipp für die automatische Anmeldung: Seite über den <b>Rechnernamen</b> aufrufen
+(z.&nbsp;B. <code>http://SERVERNAME:%d</code>, nicht über die IP-Adresse) bzw. die Adresse in Windows
+unter <i>Internetoptionen → Sicherheit → Lokales Intranet → Sites</i> eintragen.</div>""") % CFG["port"]
     return ("""<!doctype html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Netzwerk-Chat – Anmeldung</title><link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>""" + BASE_CSS + """
-body{display:flex;align-items:center;justify-content:center;padding:16px}
-.box{width:min(460px,100%)}
+body{display:flex;align-items:center;justify-content:center;padding:16px;min-height:100%}
+.box{width:min(480px,100%)}
 .box .in{padding:22px}
 p{color:#a9b7bf;margin:0 0 16px}
 form{display:flex;gap:10px}
+.ff{border:1px solid var(--amber-g);background:var(--amber-d);padding:14px 16px 6px;margin-bottom:20px}
+.ff-h{font:700 10px/1 var(--mono);letter-spacing:.18em;color:var(--amber);margin-bottom:10px}
+.ff p{margin-bottom:10px}
+.ff ol{margin:0 0 8px;padding-left:20px;color:#c5d0d6;font-size:13px}
+.ff li{margin-bottom:9px}
+.ff code{font-family:var(--mono);color:var(--amber);font-size:12px}
+.dl{display:inline-block;text-decoration:none}
+.small{color:var(--muted);font-size:12px}
 .hint{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 .hint code{font-family:var(--mono);color:var(--amber)}
 .err{color:var(--red);font:600 12px/1.3 var(--mono);margin-bottom:12px}
 </style></head><body>
-<div class="box panel"><div class="panel-h">Netzwerk-Chat · Anmeldung</div><div class="in">""" + err + form + """
-<div class="hint">Tipp für die automatische Anmeldung: Seite über den <b>Rechnernamen</b> aufrufen
-(z.&nbsp;B. <code>http://SERVERNAME:%d</code>, nicht über die IP-Adresse) bzw. die Adresse in Windows
-unter <i>Internetoptionen → Sicherheit → Lokales Intranet → Sites</i> eintragen.</div>
-</div></div></body></html>""" % CFG["port"])
+<div class="box panel"><div class="panel-h">Netzwerk-Chat · Anmeldung</div><div class="in">""" + err + ff + form + hint + """
+</div></div></body></html>""")
 
 
 # --------------------------------------------------------------------------

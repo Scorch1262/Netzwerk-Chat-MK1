@@ -1,11 +1,13 @@
-# Netzwerk-Chat v1.2.1
+# Netzwerk-Chat v1.3.0
 
 Lokaler Netzwerk-Chat als Website. Das Programm läuft auf **einem** Rechner im Netzwerk –
 alle anderen öffnen nur die Seite im Browser. Keine Installation auf den Arbeitsplätzen.
 
+![Netzwerk-Chat – Teilnehmerliste mit Online-Status und Chatverlauf](docs/screenshot.png)
+
 ## Funktionen
 - **Automatische Anmeldung über den Windows-Benutzer** (integrierte Windows-Anmeldung / NTLM –
-  derselbe Benutzername, den `whoami` anzeigt)
+  derselbe Benutzername, den `whoami` anzeigt) – in Edge, Chrome **und Firefox**
 - **Präsenz:** Alle Teilnehmer werden links angezeigt – Punkt grün = hat die Seite gerade geöffnet,
   Punkt leer = Seite geschlossen. Keine Aktivitätsanzeige.
 - **Verschlüsselte Speicherung:** Chats werden in der Datenbank verschlüsselt abgelegt. Der Schlüssel
@@ -47,8 +49,28 @@ Falls stattdessen ein Anmeldefenster erscheint:
   (Site-to-Zone-Zuweisung, Wert `1`) – danach geht es überall ohne Rückfrage.
 - **Einzelner PC:** `inetcpl.cpl` → Sicherheit → Lokales Intranet → Sites → Erweitert →
   `http://SERVERNAME` hinzufügen.
-- **Firefox:** `about:config` → `network.automatic-ntlm-auth.trusted-uris` = `http://SERVERNAME`
 - Fenster abbrechen → es erscheint die Ersatzanmeldung per Namenseingabe (abschaltbar).
+
+### Firefox
+Firefox sendet den Windows-Benutzer nur an Adressen, die per Firefox-Richtlinie freigegeben sind.
+Ohne Freigabe zeigt Firefox ein Anmeldefenster → **Abbrechen** → die Anmeldeseite bietet die Freigabe an:
+
+<img src="docs/firefox-anmeldung.png" alt="Anmeldeseite in Firefox mit Freigabe-Button" width="450">
+
+1. **Freigabe herunterladen** – der Server erzeugt `netzwerk-chat-firefox.reg` passend zu seiner Adresse
+   (auch direkt abrufbar unter `http://SERVERNAME:8090/firefox-einrichten.reg`).
+2. Datei doppelklicken → **Ja** → **OK**. Schreibt nur unter `HKEY_CURRENT_USER`, keine Adminrechte nötig.
+3. Firefox komplett schließen und neu starten – ab jetzt automatische Anmeldung.
+
+Die Datei setzt die Firefox-Richtlinie `Authentication` (`NTLM` = Servername, `AllowNonFQDN.NTLM` = an).
+Firefox zeigt danach unter Einstellungen den Hinweis „Ihr Browser wird von Ihrer Organisation verwaltet“ –
+das ist normal.
+
+**Für viele PCs / Domäne:** dieselbe Richtlinie zentral verteilen – per Firefox-ADMX-Vorlage
+(Authentifizierung → NTLM) oder mit `distribution/policies.json` im Firefox-Programmordner:
+```json
+{ "policies": { "Authentication": { "NTLM": ["SERVERNAME"], "AllowNonFQDN": { "NTLM": true } } } }
+```
 
 ## Verschlüsselung der gespeicherten Chats
 - In `netzwerk_chat.db` stehen die Nachrichtentexte nur verschlüsselt (HMAC-SHA256-Schlüsselstrom +
@@ -72,8 +94,8 @@ und erzeugt ein GitHub-Release (exe + ZIP mit README).
 
 Auslösen:
 ```
-git tag v1.2.1
-git push origin v1.2.1
+git tag v1.3.0
+git push origin v1.3.0
 ```
 oder in GitHub unter **Actions → „EXE bauen und Release erzeugen“ → Run workflow** die Version eingeben.
 Der Workflow bricht ab, wenn die Version nicht zu `VERSION` in `netzwerk_chat.py` passt.
