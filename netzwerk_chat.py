@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Netzwerk-Chat  -  v1.3.0
+Netzwerk-Chat  -  v1.4.0
 
 Lokaler Netzwerk-Chat als Website. Läuft auf EINEM Rechner im Netzwerk,
 alle anderen öffnen nur die Seite im Browser (keine Installation).
@@ -39,7 +39,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 # --------------------------------------------------------------------------
 # Einstellungen (per Kommandozeile überschreibbar)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-#  Netzwerk-Chat Offline-Build-Kit v1.0.0
+#  Netzwerk-Chat Offline-Build-Kit v1.1.0
 #  Schritt 1 von 3 - auf dem Mac (mit Internet) ausfuehren.
 #
 #  Laedt PyInstaller und alle Abhaengigkeiten als fertige Wheels
@@ -16,7 +16,7 @@ PY_TAG="${PY_VER/./}"               # -> 311
 PYINSTALLER="pyinstaller==6.10.0"
 
 echo
-echo "=== Netzwerk-Chat Offline-Build-Kit v1.0.0 ==="
+echo "=== Netzwerk-Chat Offline-Build-Kit v1.1.0 ==="
 echo "=== Schritt 1: Pakete fuer Windows herunterladen ==="
 echo
 

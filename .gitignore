@@ -10,3 +10,5 @@ offline_build_kit/paketliste.txt
 offline_build_kit/venv/
 offline_build_kit/fertige_exe/
 offline_build_kit/build_tmp/
+brume2/ipk/
+brume2/*.tar.gz

@@ -1,4 +1,4 @@
-# Netzwerk-Chat v1.3.0
+# Netzwerk-Chat v1.4.0
 
 Lokaler Netzwerk-Chat als Website. Das Programm läuft auf **einem** Rechner im Netzwerk –
 alle anderen öffnen nur die Seite im Browser. Keine Installation auf den Arbeitsplätzen.
@@ -15,7 +15,8 @@ alle anderen öffnen nur die Seite im Browser. Keine Installation auf den Arbeit
 - **Verlauf:** Jeder Chat mit einer Person wird beim erneuten Anklicken automatisch geladen –
   solange das Programm auf dem Server läuft. **Beim Neustart werden alle Chats verworfen.**
 - Ungelesen-Zähler, Hinweiston (abschaltbar), Anzahl im Browser-Tab-Titel
-- Nur Python-Standardbibliothek (Python ≥ 3.8) bzw. fertige `NetzwerkChat.exe`
+- Nur Python-Standardbibliothek (Python ≥ 3.7) – als fertige Windows-exe oder auf einer
+  **GL.iNet Brume 2** (Offline-Installationspaket)
 
 ## Start (auf dem Server-Rechner)
 `NetzwerkChat.exe` aus dem GitHub-Release starten – oder mit Python:
@@ -88,19 +89,46 @@ das ist normal.
 - Die Datenbank `netzwerk_chat.db` liegt neben dem Programm bzw. der exe.
 - Anmeldung bleibt 30 Tage per Cookie gespeichert.
 
-## EXE und Release per GitHub Actions
-Der Workflow `.github/workflows/build-exe.yml` baut auf Windows mit PyInstaller `NetzwerkChat.exe`
-und erzeugt ein GitHub-Release (exe + ZIP mit README).
+## GitHub Actions: exe, Brume-2-Paket und Release
+Der Workflow `.github/workflows/build-release.yml` läuft bei **jedem Push** auf `main`/`master`
+(und manuell über **Actions → „Build und Release“ → Run workflow**):
 
-Auslösen:
+1. baut die Windows-exe (`NetzwerkChat-v<Version>-windows.exe` + ZIP),
+2. baut das Offline-Paket für die Brume 2 (`NetzwerkChat-v<Version>-brume2-offline.tar.gz`,
+   inkl. Python-Paketen),
+3. legt **automatisch ein Release** `v<Version>` an, wenn es zur `VERSION` in `netzwerk_chat.py`
+   noch keins gibt. Neue Version veröffentlichen = `VERSION` erhöhen und pushen.
+
+Bei Pushes ohne neue Version wird nur gebaut – die Dateien hängen dann am Workflow-Lauf unter *Artifacts*.
+
+**Wenn unter „Actions“ nichts erscheint:**
+- Der Ordner **`.github`** fehlt im Repo. Er ist versteckt (Punkt am Anfang) und wird beim Hochladen
+  per Drag & Drop oder im Mac-Finder leicht übersehen. Im Finder versteckte Dateien mit
+  **⌘ + ⇧ + .** einblenden; unter Windows im Explorer *Ansicht → Ausgeblendete Elemente*.
+  Im Repo muss die Datei unter `.github/workflows/build-release.yml` liegen.
+  Notfalls auf GitHub **Add file → Create new file**, als Namen `.github/workflows/build-release.yml`
+  eingeben und den Inhalt einfügen.
+- *Settings → Actions → General*: „Allow all actions and reusable workflows“ muss aktiv sein.
+- Kein Release trotz grünem Lauf: *Settings → Actions → General → Workflow permissions* auf
+  **„Read and write permissions“** stellen.
+
+## GL.iNet Brume 2
+Netzwerk-Chat läuft auch auf einer **GL.iNet Brume 2** – dann ist kein Windows-Server-PC nötig.
+Das Offline-Paket enthält Python 3, auf der Brume 2 ist **kein Internet** nötig:
+
 ```
-git tag v1.3.0
-git push origin v1.3.0
+scp -O NetzwerkChat-v1.4.0-brume2-offline.tar.gz root@<IP-der-Brume>:/tmp/
+ssh root@<IP-der-Brume>
+cd /tmp && tar -xzf NetzwerkChat-v1.4.0-brume2-offline.tar.gz
+sh NetzwerkChat-brume2/install.sh
 ```
-oder in GitHub unter **Actions → „EXE bauen und Release erzeugen“ → Run workflow** die Version eingeben.
-Der Workflow bricht ab, wenn die Version nicht zu `VERSION` in `netzwerk_chat.py` passt.
+Installiert nach `/root/Netzwerk-Chat`, richtet den Autostart ein und gibt den Port in der Firewall frei.
+Das Paket kommt fertig aus dem GitHub-Release oder wird im Ordner `brume2` selbst erstellt –
+per `pakete_herunterladen_mac.sh` (Mac) oder `pakete_herunterladen_windows.bat` (Windows).
+Details: `brume2/ANLEITUNG_BRUME2.md`.
 
 ## EXE offline bauen (ohne GitHub)
-Im Ordner `offline_build_kit` liegt ein Offline-Build-Kit: Der Mac lädt PyInstaller als
-Windows-Pakete herunter, ein Windows-10-PC mit Python 3.11 installiert sie ohne Internet und baut
-`NetzwerkChat-v<Version>-windows.exe`. Ablauf siehe `offline_build_kit/ANLEITUNG.md`.
+Im Ordner `offline_build_kit` liegt ein Offline-Build-Kit: Ein Rechner mit Internet lädt PyInstaller
+als Windows-Pakete herunter – per `1_mac_pakete_herunterladen.sh` (Mac) **oder**
+`1_windows_pakete_herunterladen.bat` (Windows). Ein Windows-10-PC mit Python 3.11 installiert sie
+ohne Internet und baut `NetzwerkChat-v<Version>-windows.exe`. Ablauf siehe `offline_build_kit/ANLEITUNG.md`.

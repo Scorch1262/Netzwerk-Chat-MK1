@@ -1,9 +1,10 @@
-# Netzwerk-Chat – Windows-exe offline bauen: Mac lädt, Win10 baut
+# Netzwerk-Chat – Windows-exe offline bauen: Mac oder Windows lädt, Win10 baut
 
-**Offline-Build-Kit v1.0.0**
+**Offline-Build-Kit v1.1.0**
 
-Drei Skripte, drei Schritte. Python 3.11 (64-Bit) muss auf dem Windows-10-PC
-bereits installiert sein. Das Kit lädt auf dem Mac PyInstaller herunter,
+Drei Schritte. Python 3.11 (64-Bit) muss auf dem Windows-10-PC
+bereits installiert sein. Das Kit lädt auf einem Rechner mit Internet (Mac **oder** Windows)
+PyInstaller herunter,
 installiert es auf dem Windows-PC ohne Internet und baut dort die exe. Das
 Ergebnis entspricht dem GitHub-Actions-Build: `NetzwerkChat-v<Version>-windows.exe`.
 
@@ -14,16 +15,17 @@ lädt das Kit nur PyInstaller und dessen Abhängigkeiten.
 Netzwerk-Chat/
 ├── netzwerk_chat.py                     <- wird gebaut
 └── offline_build_kit/
-    ├── 1_mac_pakete_herunterladen.sh    <- läuft auf dem Mac (mit Internet)
+    ├── 1_mac_pakete_herunterladen.sh    <- Schritt 1 auf dem Mac (mit Internet)
+    ├── 1_windows_pakete_herunterladen.bat <- ODER Schritt 1 auf einem Windows-PC (mit Internet)
     ├── 2_win10_pakete_installieren.bat  <- läuft auf dem Win10-PC
     ├── 3_win10_exe_bauen.bat            <- läuft auf dem Win10-PC
-    ├── _pruefsummen.py                  <- Hilfsskript für Schritt 2
+    ├── _pruefsummen.py                  <- Hilfsskript (Prüfsummen)
     └── ANLEITUNG.md                     <- diese Datei
 ```
 
 ---
 
-## Schritt 1 – auf dem Mac
+## Schritt 1 – Variante Mac
 
 1. Die Netzwerk-Chat-ZIP entpacken.
 2. Terminal öffnen, in den Kit-Ordner wechseln und das Skript starten:
@@ -42,6 +44,17 @@ Netzwerk-Chat/
    - die Datei **`paketliste.txt`**.
 4. Den **kompletten Ordner `Netzwerk-Chat`** (mit `netzwerk_chat.py` und
    `offline_build_kit`) auf den Windows-PC kopieren, z. B. per USB-Stick.
+
+## Schritt 1 – Variante Windows
+
+Auf einem **beliebigen Windows-PC mit Internet** (Python 3 in irgendeiner Version mit pip):
+1. Die Netzwerk-Chat-ZIP entpacken.
+2. Im Ordner `offline_build_kit` doppelt auf **`1_windows_pakete_herunterladen.bat`** klicken.
+3. Es entstehen dieselben Dateien wie beim Mac-Skript (`offline_pakete` mit Prüfsummen,
+   `paketliste.txt`) – immer passend für **Python 3.11 / 64-Bit** auf dem Ziel-PC.
+4. Den kompletten Ordner `Netzwerk-Chat` auf den Windows-10-PC ohne Internet kopieren.
+
+Ist das der **gleiche** PC, auf dem gebaut wird, einfach direkt mit Schritt 2 weitermachen.
 
 ## Schritt 2 – auf dem Windows-10-PC
 
@@ -89,8 +102,8 @@ und Schritt 3 erneut starten.
 
 - **„Kein passendes Python 3.11 (64-Bit) gefunden"** (Schritt 2) →
   `python --version` bzw. `py --list` prüfen. Die Pakete aus Schritt 1 passen
-  nur zu 3.11 / 64-Bit. Anderes Python? Dann im Mac-Skript oben
-  `PY_VER="3.11"` anpassen (z. B. `"3.12"`) und Schritt 1 wiederholen.
+  nur zu 3.11 / 64-Bit. Anderes Python? Dann im Download-Skript oben
+  `PY_VER`/`PY_TAG` anpassen (z. B. `3.12` / `312`) und Schritt 1 wiederholen.
 - **„DEFEKT"/„FEHLT" bei der Paketprüfung** → Kopiervorgang unvollständig;
   `offline_pakete` erneut auf den PC kopieren.
 - **„venv mit PyInstaller wurde nicht gefunden"** (Schritt 3) → erst Schritt 2

@@ -1,0 +1,135 @@
+name: Build und Release
+
+# Läuft bei JEDEM Push auf main/master (und bei Tags v*), außerdem manuell
+# unter Actions -> "Build und Release" -> "Run workflow".
+#
+# - Baut immer: Windows-exe und das Offline-Installationspaket für die GL.iNet Brume 2
+#   (die Dateien hängen dann am Workflow-Lauf unter "Artifacts").
+# - Release: Gibt es zur VERSION in netzwerk_chat.py noch kein Release (Tag v<VERSION>),
+#   wird es automatisch angelegt. Neue Version = VERSION erhöhen + pushen.
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: Version ermitteln
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      release_exists: ${{ steps.v.outputs.release_exists }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: VERSION aus netzwerk_chat.py lesen
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(grep -m1 '^VERSION = ' netzwerk_chat.py | sed -E 's/VERSION = "([^"]+)"/\1/')
+          if [ -z "$V" ]; then echo "::error::VERSION in netzwerk_chat.py nicht gefunden"; exit 1; fi
+          TAG="v$V"
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "$TAG" ]; then
+            echo "::error::Tag ${{ github.ref_name }} passt nicht zu VERSION = \"$V\" in netzwerk_chat.py"
+            exit 1
+          fi
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            EXISTS=true
+            echo "Release $TAG existiert bereits - es wird nur gebaut, kein neues Release."
+          else
+            EXISTS=false
+            echo "Release $TAG existiert noch nicht - wird nach dem Build angelegt."
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release_exists=$EXISTS" >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Windows-exe bauen
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: PyInstaller installieren
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: exe bauen
+        run: pyinstaller --onefile --console --clean --name NetzwerkChat netzwerk_chat.py
+
+      - name: Kurztest
+        run: dist\NetzwerkChat.exe --help
+
+      - name: Umbenennen und ZIP packen
+        shell: pwsh
+        run: |
+          $v = "${{ needs.version.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Copy-Item dist\NetzwerkChat.exe "out\NetzwerkChat-v$v-windows.exe"
+          Compress-Archive -Path dist\NetzwerkChat.exe, README.md -DestinationPath "out\NetzwerkChat-v$v-windows.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/*
+
+  brume2:
+    name: Brume-2-Offline-Paket bauen
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python-Pakete (OpenWrt 21.02, aarch64_cortex-a53) laden
+        run: python3 brume2/brume_pakete_laden.py --ziel brume2/ipk
+
+      - name: Offline-Paket packen
+        run: |
+          python3 brume2/_paket_packen.py
+          mkdir -p out
+          mv brume2/*.tar.gz out/
+          tar -tzvf out/*.tar.gz | head -n 20
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brume2
+          path: out/*
+
+  release:
+    name: Release anlegen
+    needs: [version, windows, brume2]
+    if: needs.version.outputs.release_exists == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Release erzeugen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: Netzwerk-Chat ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          body: |
+            **Netzwerk-Chat ${{ needs.version.outputs.tag }}**
+
+            - **Windows:** `NetzwerkChat-…-windows.exe` auf **einem** Rechner starten (keine Installation nötig),
+              alle anderen öffnen `http://SERVERNAME:8090` im Browser.
+            - **GL.iNet Brume 2:** `NetzwerkChat-…-brume2-offline.tar.gz` – enthält Python und alles Nötige,
+              Installation ohne Internet (siehe `ANLEITUNG_BRUME2.md` im Archiv).
+
+            Chats werden verschlüsselt gespeichert und beim Neustart des Programms verworfen.
+          files: out/*

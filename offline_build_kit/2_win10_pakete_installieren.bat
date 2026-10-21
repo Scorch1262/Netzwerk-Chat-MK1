@@ -1,11 +1,11 @@
 @echo off
 REM ============================================================
-REM  Netzwerk-Chat Offline-Build-Kit v1.0.0
+REM  Netzwerk-Chat Offline-Build-Kit v1.1.0
 REM  Schritt 2 von 3 - auf dem Windows-10-PC ausfuehren.
 REM  Python 3.11 (64-Bit) muss auf diesem PC bereits installiert sein.
 REM
 REM  Installiert PyInstaller komplett OFFLINE aus dem Ordner
-REM  "offline_pakete" (vom Mac-Skript) in eine neue virtuelle
+REM  "offline_pakete" (vom Mac- oder Windows-Download-Skript) in eine neue virtuelle
 REM  Umgebung "venv". Kein Internetzugriff noetig.
 REM ============================================================
 
@@ -13,19 +13,21 @@ setlocal
 cd /d "%~dp0"
 
 echo.
-echo === Netzwerk-Chat Offline-Build-Kit v1.0.0 ===
+echo === Netzwerk-Chat Offline-Build-Kit v1.1.0 ===
 echo === Schritt 2: Pakete offline installieren ===
 echo.
 
 if not exist "offline_pakete\python_version.txt" (
     echo [FEHLER] Ordner "offline_pakete" fehlt oder ist unvollstaendig.
-    echo Bitte zuerst auf dem Mac "1_mac_pakete_herunterladen.sh"
-    echo ausfuehren und den kompletten Ordner hierher kopieren.
+    echo Bitte zuerst auf einem Rechner mit Internet
+    echo "1_mac_pakete_herunterladen.sh" ^(Mac^) oder
+    echo "1_windows_pakete_herunterladen.bat" ^(Windows^) ausfuehren
+    echo und den kompletten Ordner hierher kopieren.
     pause
     exit /b 1
 )
 if not exist "paketliste.txt" (
-    echo [FEHLER] "paketliste.txt" fehlt - sie entsteht in Schritt 1 auf dem Mac.
+    echo [FEHLER] "paketliste.txt" fehlt - sie entsteht in Schritt 1.
     pause
     exit /b 1
 )

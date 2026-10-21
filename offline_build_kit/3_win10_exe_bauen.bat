@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  Netzwerk-Chat Offline-Build-Kit v1.0.0
+REM  Netzwerk-Chat Offline-Build-Kit v1.1.0
 REM  Schritt 3 von 3 - auf dem Windows-10-PC ausfuehren.
 REM
 REM  Baut aus netzwerk_chat.py die exe - genauso wie der
@@ -13,7 +13,7 @@ cd /d "%~dp0"
 set "KITDIR=%~dp0"
 
 echo.
-echo === Netzwerk-Chat Offline-Build-Kit v1.0.0 ===
+echo === Netzwerk-Chat Offline-Build-Kit v1.1.0 ===
 echo === Schritt 3: exe bauen ===
 echo.
 
