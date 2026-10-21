@@ -1,4 +1,4 @@
-# Netzwerk-Chat v1.2.0
+# Netzwerk-Chat v1.2.1
 
 Lokaler Netzwerk-Chat als Website. Das Programm läuft auf **einem** Rechner im Netzwerk –
 alle anderen öffnen nur die Seite im Browser. Keine Installation auf den Arbeitsplätzen.
@@ -72,8 +72,13 @@ und erzeugt ein GitHub-Release (exe + ZIP mit README).
 
 Auslösen:
 ```
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.2.1
+git push origin v1.2.1
 ```
 oder in GitHub unter **Actions → „EXE bauen und Release erzeugen“ → Run workflow** die Version eingeben.
 Der Workflow bricht ab, wenn die Version nicht zu `VERSION` in `netzwerk_chat.py` passt.
+
+## EXE offline bauen (ohne GitHub)
+Im Ordner `offline_build_kit` liegt ein Offline-Build-Kit: Der Mac lädt PyInstaller als
+Windows-Pakete herunter, ein Windows-10-PC mit Python 3.11 installiert sie ohne Internet und baut
+`NetzwerkChat-v<Version>-windows.exe`. Ablauf siehe `offline_build_kit/ANLEITUNG.md`.

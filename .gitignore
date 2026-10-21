@@ -5,3 +5,8 @@ build/
 dist/
 *.spec
 __pycache__/
+offline_build_kit/offline_pakete/
+offline_build_kit/paketliste.txt
+offline_build_kit/venv/
+offline_build_kit/fertige_exe/
+offline_build_kit/build_tmp/

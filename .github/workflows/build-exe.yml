@@ -1,7 +1,7 @@
 name: EXE bauen und Release erzeugen
 
 # Release auslösen:
-#   a) Tag pushen:            git tag v1.2.0 && git push origin v1.2.0
+#   a) Tag pushen:            git tag v1.2.1 && git push origin v1.2.1
 #   b) oder in GitHub unter Actions -> "EXE bauen und Release erzeugen" -> Run workflow (Version eingeben)
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version ohne v (z. B. 1.2.0) - muss zu VERSION in netzwerk_chat.py passen"
+        description: "Version ohne v (z. B. 1.2.1) - muss zu VERSION in netzwerk_chat.py passen"
         required: true
 
 permissions:
