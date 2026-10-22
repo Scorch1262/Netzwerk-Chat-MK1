@@ -1,4 +1,4 @@
-# Netzwerk-Chat v1.4.0
+# Netzwerk-Chat v1.5.0
 
 Lokaler Netzwerk-Chat als Website. Das Programm läuft auf **einem** Rechner im Netzwerk –
 alle anderen öffnen nur die Seite im Browser. Keine Installation auf den Arbeitsplätzen.
@@ -14,7 +14,9 @@ alle anderen öffnen nur die Seite im Browser. Keine Installation auf den Arbeit
   existiert nur im Arbeitsspeicher und wird bei jedem Programmstart neu erzeugt.
 - **Verlauf:** Jeder Chat mit einer Person wird beim erneuten Anklicken automatisch geladen –
   solange das Programm auf dem Server läuft. **Beim Neustart werden alle Chats verworfen.**
-- Ungelesen-Zähler, Hinweiston (abschaltbar), Anzahl im Browser-Tab-Titel
+- **Hinweis auf neue Nachrichten auch bei minimiertem Fenster:** Windows-Benachrichtigung mit
+  Absender und Text (nach einmaliger Freigabe), blinkender Fenstertitel, Symbol mit Zähler
+- Ungelesen-Zähler, Hinweiston (abschaltbar)
 - Nur Python-Standardbibliothek (Python ≥ 3.7) – als fertige Windows-exe oder auf einer
   **GL.iNet Brume 2** (Offline-Installationspaket)
 
@@ -58,12 +60,13 @@ Ohne Freigabe zeigt Firefox ein Anmeldefenster → **Abbrechen** → die Anmelde
 
 <img src="docs/firefox-anmeldung.png" alt="Anmeldeseite in Firefox mit Freigabe-Button" width="450">
 
-1. **Freigabe herunterladen** – der Server erzeugt `netzwerk-chat-firefox.reg` passend zu seiner Adresse
-   (auch direkt abrufbar unter `http://SERVERNAME:8090/firefox-einrichten.reg`).
+1. **Freigabe herunterladen** – der Server erzeugt `netzwerk-chat-einrichten.reg` passend zu seiner Adresse
+   (auch direkt abrufbar unter `http://SERVERNAME:8090/einrichten.reg`).
 2. Datei doppelklicken → **Ja** → **OK**. Schreibt nur unter `HKEY_CURRENT_USER`, keine Adminrechte nötig.
 3. Firefox komplett schließen und neu starten – ab jetzt automatische Anmeldung.
 
-Die Datei setzt die Firefox-Richtlinie `Authentication` (`NTLM` = Servername, `AllowNonFQDN.NTLM` = an).
+Die Datei setzt die Firefox-Richtlinie `Authentication` (`NTLM` = Servername, `AllowNonFQDN.NTLM` = an)
+und schaltet gleichzeitig die Windows-Benachrichtigungen frei (siehe unten).
 Firefox zeigt danach unter Einstellungen den Hinweis „Ihr Browser wird von Ihrer Organisation verwaltet“ –
 das ist normal.
 
@@ -72,6 +75,45 @@ das ist normal.
 ```json
 { "policies": { "Authentication": { "NTLM": ["SERVERNAME"], "AllowNonFQDN": { "NTLM": true } } } }
 ```
+
+## Neue Nachrichten bei minimiertem Fenster
+Ist das Chat-Fenster minimiert, verdeckt oder im Hintergrund, macht eine neue Nachricht sich bemerkbar durch:
+
+| Hinweis | Voraussetzung |
+|---|---|
+| **Windows-Benachrichtigung** (Toast unten rechts) mit Absender und Text – Klick öffnet direkt den Chat | einmalige Freigabe pro PC (siehe unten) |
+| **Blinkender Fenstertitel** „✉ Name schreibt …“ – sichtbar im Tab und in der Taskleiste (bei Taskleisten-Beschriftung bzw. beim Darüberfahren) | keine |
+| **Symbol mit Zähler** (Tab-Symbol mit Anzahl ungelesener Nachrichten) | keine |
+| Hinweiston | keine (Schalter **TON**) |
+
+Das Blinken endet, sobald das Fenster wieder im Vordergrund ist.
+
+### Windows-Benachrichtigungen einmalig freischalten
+Browser erlauben Benachrichtigungen nur für HTTPS-Seiten. Damit sie auch für den Chat (`http://…`)
+funktionieren, wird die Adresse einmal pro PC/Benutzer freigegeben:
+
+<img src="docs/benachrichtigung-einrichten.png" alt="Dialog zum Einrichten der Windows-Benachrichtigungen" width="600">
+
+1. Im Chat oben auf **MELDUNG: EINRICHTEN** klicken → **Freigabe herunterladen**.
+2. `netzwerk-chat-einrichten.reg` doppelklicken → **Ja** → **OK** (nur `HKEY_CURRENT_USER`, keine Adminrechte).
+3. Browser komplett neu starten: `edge://restart` bzw. `chrome://restart` in die Adresszeile,
+   Firefox ganz schließen und neu öffnen.
+4. Der Button zeigt jetzt **MELDUNG: ERLAUBEN** → anklicken → ggf. „Zulassen“. Danach **MELDUNG: AN**
+   (per Klick ein-/ausschaltbar).
+
+Die `.reg`-Datei setzt für die Server-Adresse(n):
+- **Chrome / Edge:** `OverrideSecurityRestrictionsOnInsecureOrigin` und `NotificationsAllowedForUrls`
+- **Firefox:** `Permissions → Notifications → Allow` und die Einstellung `dom.securecontext.allowlist`
+  (plus die Windows-Anmeldung, siehe Abschnitt Firefox)
+- **Windows:** Zuordnung zur Zone „Lokales Intranet“ – damit klappt die automatische Anmeldung in
+  Edge/Chrome auch beim Aufruf über die IP-Adresse
+
+Hinweise:
+- Chrome/Edge zeigen danach „Von Ihrer Organisation verwaltet“ – das ist normal.
+- In zentral verwalteten Umgebungen (Domäne mit Browser-Richtlinien) dieselben Richtlinien besser per
+  Gruppenrichtlinie verteilen – die `.reg` kann vorhandene nummerierte Listeneinträge überschreiben.
+- Erscheinen trotz **MELDUNG: AN** keine Meldungen: Windows-Einstellungen → System → Benachrichtigungen –
+  für den Browser aktiviert? „Nicht stören“ / Fokus-Assistent aus?
 
 ## Verschlüsselung der gespeicherten Chats
 - In `netzwerk_chat.db` stehen die Nachrichtentexte nur verschlüsselt (HMAC-SHA256-Schlüsselstrom +
@@ -117,9 +159,9 @@ Netzwerk-Chat läuft auch auf einer **GL.iNet Brume 2** – dann ist kein Window
 Das Offline-Paket enthält Python 3, auf der Brume 2 ist **kein Internet** nötig:
 
 ```
-scp -O NetzwerkChat-v1.4.0-brume2-offline.tar.gz root@<IP-der-Brume>:/tmp/
+scp -O NetzwerkChat-v1.5.0-brume2-offline.tar.gz root@<IP-der-Brume>:/tmp/
 ssh root@<IP-der-Brume>
-cd /tmp && tar -xzf NetzwerkChat-v1.4.0-brume2-offline.tar.gz
+cd /tmp && tar -xzf NetzwerkChat-v1.5.0-brume2-offline.tar.gz
 sh NetzwerkChat-brume2/install.sh
 ```
 Installiert nach `/root/Netzwerk-Chat`, richtet den Autostart ein und gibt den Port in der Firewall frei.

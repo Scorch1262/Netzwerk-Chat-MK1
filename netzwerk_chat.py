@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Netzwerk-Chat  -  v1.4.0
+Netzwerk-Chat  -  v1.5.0
 
 Lokaler Netzwerk-Chat als Website. Läuft auf EINEM Rechner im Netzwerk,
 alle anderen öffnen nur die Seite im Browser (keine Installation).
 
 - Anmeldung automatisch über den Windows-Benutzer (integrierte Windows-
   Anmeldung / NTLM - derselbe Name, den "whoami" liefert)
-  Firefox: einmalige Freigabe per /firefox-einrichten.reg (wird vom Server
-  passend erzeugt und auf der Anmeldeseite angeboten)
+  Firefox: einmalige Freigabe per /einrichten.reg (wird vom Server passend
+  erzeugt und auf der Anmeldeseite angeboten)
+- Hinweis auf neue Nachrichten auch bei minimiertem Fenster: blinkender
+  Fenstertitel, Symbol mit Zähler und - nach einmaliger Freigabe über
+  /einrichten.reg - Windows-Benachrichtigungen (Chrome, Edge, Firefox)
 - Live-Anzeige, wer die Seite gerade geöffnet hat (online / offline)
 - Chatverlauf je Person wird verschlüsselt in SQLite gespeichert und beim
   erneuten Öffnen automatisch wiederhergestellt. Der Schlüssel liegt nur im
@@ -28,6 +31,7 @@ import hmac
 import json
 import os
 import queue
+import re
 import secrets
 import socket
 import sqlite3
@@ -39,7 +43,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 # --------------------------------------------------------------------------
 # Einstellungen (per Kommandozeile überschreibbar)
@@ -413,28 +417,64 @@ class Handler(BaseHTTPRequestHandler):
             return host.split("]")[0] + "]"
         return host.rsplit(":", 1)[0] if ":" in host else host
 
-    def firefox_reg(self):
-        """Registry-Datei: Firefox darf die Windows-Anmeldung (NTLM) an diesen Server senden.
+    def setup_reg(self):
+        """Registry-Datei zur einmaligen Einrichtung eines Arbeitsplatzes (nur HKEY_CURRENT_USER).
 
-        Schreibt Firefox-Richtlinien nach HKEY_CURRENT_USER (keine Adminrechte nötig).
+        - Firefox: Windows-Anmeldung (NTLM) an diesen Server erlauben
+        - Chrome / Edge / Firefox: diese http-Adresse als "sicher" behandeln und
+          Benachrichtigungen erlauben (Browser erlauben Meldungen sonst nur über HTTPS)
+        - Windows: Server der Zone "Lokales Intranet" zuordnen (automatische Anmeldung
+          in Edge/Chrome auch bei Aufruf über die IP-Adresse)
         """
+        def clean(text):
+            return "".join(c for c in text if c.isalnum() or c in ".-_:[]")
+
         hosts = []
         for h in (self._request_host(), socket.gethostname().split(".")[0], socket.getfqdn()):
-            h = (h or "").strip().lower()
+            h = clean((h or "").strip().lower())
             if h and h not in hosts and h not in ("localhost", "localhost.localdomain"):
                 hosts.append(h)
+        port = CFG["port"]
+        origins = [("http://%s" % h) if port == 80 else ("http://%s:%d" % (h, port)) for h in hosts]
+
+        def reg_list(key, values):
+            out = ["", "[%s]" % key]
+            out += ['"%d"="%s"' % (i, v) for i, v in enumerate(values, 1)]
+            return out
+
+        def hex7(text):   # REG_MULTI_SZ
+            raw = (text + "\0\0").encode("utf-16-le")
+            return "hex(7):" + ",".join("%02x" % b for b in raw)
+
+        ff = r"HKEY_CURRENT_USER\Software\Policies\Mozilla\Firefox"
+        prefs = json.dumps({"dom.securecontext.allowlist": {"Value": ",".join(hosts), "Status": "default"}})
         lines = ["Windows Registry Editor Version 5.00", "",
-                 "; Netzwerk-Chat v%s - Firefox: automatische Windows-Anmeldung freischalten" % VERSION,
-                 "; Erlaubt Firefox, den Windows-Benutzernamen an diese Adresse(n) zu senden.",
-                 "; Danach Firefox einmal komplett schliessen und neu starten.", "",
-                 r"[HKEY_CURRENT_USER\Software\Policies\Mozilla\Firefox\Authentication\NTLM]"]
-        for i, h in enumerate(hosts, 1):
-            lines.append('"%d"="%s"' % (i, h.replace("\\", "").replace('"', "")))
-        lines += ["", r"[HKEY_CURRENT_USER\Software\Policies\Mozilla\Firefox\Authentication\AllowNonFQDN]",
-                  '"NTLM"=dword:00000001', ""]
+                 "; Netzwerk-Chat v%s - Arbeitsplatz einmalig einrichten (nur aktueller Benutzer)" % VERSION,
+                 "; - Firefox: automatische Windows-Anmeldung",
+                 "; - Chrome/Edge/Firefox: Windows-Benachrichtigungen bei neuen Nachrichten",
+                 "; Danach den Browser komplett schliessen und neu starten",
+                 "; (Edge: edge://restart  -  Chrome: chrome://restart)."]
+        lines += reg_list(ff + r"\Authentication\NTLM", hosts)
+        lines += ["", "[%s]" % (ff + r"\Authentication\AllowNonFQDN"), '"NTLM"=dword:00000001']
+        lines += reg_list(ff + r"\Permissions\Notifications\Allow", origins)
+        lines += ["", "[%s]" % ff, '"Preferences"=' + hex7(prefs)]
+        for browser in (r"Google\Chrome", r"Microsoft\Edge"):
+            base = r"HKEY_CURRENT_USER\Software\Policies\%s" % browser
+            lines += reg_list(base + r"\OverrideSecurityRestrictionsOnInsecureOrigin", origins)
+            lines += reg_list(base + r"\NotificationsAllowedForUrls", origins)
+        zone = r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap"
+        n_range = 0
+        for h in hosts:
+            if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", h):
+                n_range += 1
+                lines += ["", r"[%s\Ranges\NetzwerkChat%d]" % (zone, n_range), '"http"=dword:00000001',
+                          '":Range"="%s"' % h]
+            elif not h.startswith("["):
+                lines += ["", r"[%s\Domains\%s]" % (zone, h), '"http"=dword:00000001']
+        lines.append("")
         body = "\ufeff".encode("utf-16-le") + "\r\n".join(lines).encode("utf-16-le")
         self._send(200, body, "application/octet-stream",
-                   [("Content-Disposition", 'attachment; filename="netzwerk-chat-firefox.reg"')])
+                   [("Content-Disposition", 'attachment; filename="netzwerk-chat-einrichten.reg"')])
 
     def _client_host(self):
         ip = self.client_address[0]
@@ -453,8 +493,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, FAVICON, "image/svg+xml")
         if url.path == "/favicon.ico":
             return self._send(204)
-        if url.path == "/firefox-einrichten.reg":
-            return self.firefox_reg()
+        if url.path in ("/einrichten.reg", "/firefox-einrichten.reg"):
+            return self.setup_reg()
         user = self._session_user()
         if not user:
             return self._json({"error": "nicht angemeldet"}, 401)
@@ -676,6 +716,18 @@ body{display:flex;flex-direction:column;overflow:hidden}
 .tbtn{background:transparent;border:1px solid var(--line2);color:var(--muted);padding:6px 10px;
   font:600 10px/1 var(--mono);letter-spacing:.14em;cursor:pointer}
 .tbtn:hover{color:var(--text);border-color:var(--muted)}
+.tbtn.warn{color:var(--amber);border-color:var(--amber-g)}
+.tbtn.ok{color:var(--teal);border-color:var(--teal-g)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+.modal-bg.show{display:flex}
+.modal{width:min(540px,100%);max-height:90vh;overflow:auto}
+.modal .in{padding:18px 20px}
+.modal p{margin:0 0 12px;color:#a9b7bf;font-size:13px}
+.modal ol{margin:0 0 12px;padding-left:20px;color:#c5d0d6;font-size:13px}
+.modal li{margin-bottom:9px}
+.modal code{font-family:var(--mono);color:var(--amber);font-size:12px}
+.modal .small{color:var(--muted);font-size:12px}
+.modal a.btn{display:inline-block;text-decoration:none}
 .conn{display:flex;align-items:center;gap:8px;font:600 10px/1 var(--mono);letter-spacing:.16em;color:var(--muted)}
 .led{width:8px;height:8px;border-radius:50%;background:var(--dim)}
 .conn.ok{color:var(--teal)} .conn.ok .led{background:var(--teal);box-shadow:0 0 8px var(--teal-g)}
@@ -737,6 +789,7 @@ body{display:flex;flex-direction:column;overflow:hidden}
   <div class="brand"><div class="logo"></div>
     <div><div class="title">NETZWERK-CHAT</div><div class="sub">LOKALES NETZ · V__VERSION__</div></div></div>
   <div class="top-right">
+    <button id="noteBtn" class="tbtn" title="Windows-Benachrichtigung bei neuer Nachricht">MELDUNG</button>
     <button id="soundBtn" class="tbtn" title="Ton bei neuer Nachricht">TON: AN</button>
     <div id="conn" class="conn"><span class="led"></span><span id="connTxt">VERBINDE …</span></div>
     <div class="me"><span class="lbl">ANGEMELDET ALS</span><span id="meName">–</span></div>
@@ -766,6 +819,10 @@ body{display:flex;flex-direction:column;overflow:hidden}
     </form>
   </section>
 </main>
+<div id="noteModal" class="modal-bg"><div class="modal panel">
+  <div class="panel-h"><span>Windows-Benachrichtigungen</span><button id="noteClose" class="tbtn" style="margin-left:auto">SCHLIESSEN</button></div>
+  <div class="in" id="noteBody"></div>
+</div></div>
 <script>
 (() => {
 const $ = s => document.querySelector(s);
@@ -846,9 +903,100 @@ function renderChatHeader() {
   st.textContent = u.online ? 'SEITE GEÖFFNET' : 'NICHT GEÖFFNET';
 }
 
-function updateTitle() {
+function unreadTotal() {
   let n = 0; S.users.forEach(u => { if (u.id !== S.active || document.hidden) n += u.unread || 0; });
-  document.title = (n ? '(' + n + ') ' : '') + 'Netzwerk-Chat';
+  return n;
+}
+function updateTitle() {
+  const n = unreadTotal();
+  if (!ATT.timer) { document.title = (n ? '(' + n + ') ' : '') + 'Netzwerk-Chat'; setFavicon(n, false); }
+}
+
+// ---------- Hinweis bei neuer Nachricht (Fenster minimiert / im Hintergrund) ----------
+const ATT = { timer: null, flip: false, from: '' };
+const FAV = document.querySelector('link[rel="icon"]');
+const FAV_BASE = '<rect width="32" height="32" rx="6" fill="#0b0f12"/><path d="M7 9h18v11H15l-5 4v-4H7z" fill="none" stroke="#ffae1a" stroke-width="2.4" stroke-linejoin="round"/>';
+function setFavicon(n, bright) {
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' + FAV_BASE;
+  if (n > 0) {
+    const t = n > 9 ? '9+' : String(n);
+    svg += '<circle cx="23" cy="9" r="9" fill="' + (bright ? '#ff4d4d' : '#ffae1a') + '" stroke="#0b0f12" stroke-width="1.5"/>' +
+           '<text x="23" y="13" font-family="Arial,sans-serif" font-size="' + (t.length > 1 ? 10 : 12) + '" font-weight="700" text-anchor="middle" fill="' + (bright ? '#fff' : '#1a1200') + '">' + t + '</text>';
+  } else {
+    svg += '<circle cx="25" cy="8" r="4" fill="#1fd1c1"/>';
+  }
+  svg += '</svg>';
+  FAV.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+function needsAttention() { return document.hidden || !document.hasFocus(); }
+function attentionTick() {
+  if (!needsAttention()) { stopAttention(); return; }
+  ATT.flip = !ATT.flip;
+  const n = unreadTotal() || 1;
+  document.title = ATT.flip ? '✉ ' + ATT.from + ' schreibt …' : '(' + n + ') Neue Nachricht – Netzwerk-Chat';
+  setFavicon(n, ATT.flip);
+}
+function startAttention(name) {
+  ATT.from = name;
+  if (!ATT.timer) { ATT.flip = false; ATT.timer = setInterval(attentionTick, 1000); }
+  attentionTick();
+}
+function stopAttention() {
+  if (ATT.timer) { clearInterval(ATT.timer); ATT.timer = null; }
+  updateTitle();
+}
+
+// Windows-Benachrichtigung (Toast) - Browser erlauben sie nur in "sicheren" Seiten:
+// https, localhost oder per /einrichten.reg freigegebene http-Adresse.
+const NOTE = { enabled: true, icon: null };
+try { NOTE.enabled = localStorage.getItem('nchat_note') !== '0'; } catch (e) {}
+const noteSupported = () => 'Notification' in window && window.isSecureContext;
+function noteIcon() {   // PNG fuer die Meldung (SVG zeigt Windows nicht ueberall an)
+  if (NOTE.icon !== null) return;
+  NOTE.icon = '';
+  try {
+    const img = new Image();
+    img.onload = () => { try { const c = document.createElement('canvas'); c.width = c.height = 128;
+      c.getContext('2d').drawImage(img, 0, 0, 128, 128); NOTE.icon = c.toDataURL('image/png'); } catch (e) {} };
+    img.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="128" height="128">' + FAV_BASE + '<circle cx="25" cy="8" r="4" fill="#1fd1c1"/></svg>');
+  } catch (e) {}
+}
+function renderNote() {
+  const b = $('#noteBtn');
+  if (!noteSupported()) { b.textContent = 'MELDUNG: EINRICHTEN'; b.className = 'tbtn warn'; return; }
+  const p = Notification.permission;
+  if (p === 'granted') { b.textContent = 'MELDUNG: ' + (NOTE.enabled ? 'AN' : 'AUS'); b.className = 'tbtn' + (NOTE.enabled ? ' ok' : ''); }
+  else if (p === 'denied') { b.textContent = 'MELDUNG: GESPERRT'; b.className = 'tbtn warn'; }
+  else { b.textContent = 'MELDUNG: ERLAUBEN'; b.className = 'tbtn warn'; }
+}
+function showNoteHelp(kind) {
+  const body = $('#noteBody');
+  if (kind === 'denied') {
+    body.innerHTML = '<p>Benachrichtigungen für diese Seite wurden im Browser <b>blockiert</b>.</p>' +
+      '<ol><li>Links neben der Adresse auf das Info-/Schloss-Symbol klicken.</li>' +
+      '<li>Bei <b>Benachrichtigungen</b> „Zulassen“ wählen und die Seite neu laden.</li></ol>';
+  } else {
+    body.innerHTML = '<p>Damit neue Nachrichten auch bei <b>minimiertem Fenster</b> als Windows-Meldung erscheinen, ' +
+      'muss diese Adresse einmal pro PC freigegeben werden – Browser erlauben Meldungen sonst nur für HTTPS-Seiten.</p>' +
+      '<ol><li><a class="btn" href="/einrichten.reg">Freigabe herunterladen</a></li>' +
+      '<li>Datei <code>netzwerk-chat-einrichten.reg</code> doppelklicken → <b>Ja</b> → <b>OK</b> ' +
+      '<span class="small">(keine Adminrechte nötig)</span></li>' +
+      '<li>Browser komplett neu starten – in die Adresszeile <code>edge://restart</code> bzw. <code>chrome://restart</code> eingeben, ' +
+      'Firefox ganz schließen und neu öffnen.</li>' +
+      '<li>Hier auf <b>MELDUNG: ERLAUBEN</b> klicken (falls der Browser fragt: „Zulassen“).</li></ol>' +
+      '<p class="small">Gilt für Chrome, Edge und Firefox. Auch ohne Freigabe blinken bei neuen Nachrichten ' +
+      'der Fenstertitel und das Symbol mit der Anzahl.</p>';
+  }
+  $('#noteModal').classList.add('show');
+}
+function notify(m, u) {
+  if (!NOTE.enabled || !noteSupported() || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(u ? u.name : m.from, {
+      body: m.text.length > 180 ? m.text.slice(0, 180) + ' …' : m.text,
+      tag: 'nchat-' + m.from, renotify: true, icon: NOTE.icon || undefined });
+    n.onclick = () => { window.focus(); n.close(); openChat(m.from); };
+  } catch (e) {}
 }
 
 // ---------- Chat ----------
@@ -962,6 +1110,7 @@ function handle(ev) {
     } else if (!own && u) u.unread++;
     if (!own && (document.hidden || S.active !== partner)) beep();
     renderUsers(); updateTitle();
+    if (!own && needsAttention()) { startAttention(u ? u.name : partner); notify(m, u); }
   } else if (ev.type === 'read') {
     const u = S.users.get(ev.with); if (u) { u.unread = 0; renderUsers(); updateTitle(); }
   }
@@ -974,6 +1123,17 @@ $('#input').addEventListener('input', autosize);
 $('#filter').addEventListener('input', renderUsers);
 $('#back').addEventListener('click', () => { document.body.classList.remove('chat-open'); S.active = null; renderUsers(); renderChatHeader(); });
 $('#soundBtn').addEventListener('click', () => { S.sound = !S.sound; try { localStorage.setItem('nchat_sound', S.sound ? '1' : '0'); } catch (e) {} renderSound(); if (S.sound) beep(); });
+$('#noteBtn').addEventListener('click', async () => {
+  if (!noteSupported()) { showNoteHelp('setup'); return; }
+  const p = Notification.permission;
+  if (p === 'default') { try { await Notification.requestPermission(); } catch (e) {} }
+  else if (p === 'denied') showNoteHelp('denied');
+  else { NOTE.enabled = !NOTE.enabled; try { localStorage.setItem('nchat_note', NOTE.enabled ? '1' : '0'); } catch (e) {} }
+  renderNote();
+});
+$('#noteClose').addEventListener('click', () => $('#noteModal').classList.remove('show'));
+$('#noteModal').addEventListener('click', e => { if (e.target.id === 'noteModal') $('#noteModal').classList.remove('show'); });
+window.addEventListener('focus', () => { if (ATT.timer) stopAttention(); });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && S.active) {
     const u = S.users.get(S.active);
@@ -987,7 +1147,7 @@ window.addEventListener('pagehide', () => {
 });
 setInterval(() => { renderUsers(); }, 60000);   // "zuletzt"-Zeiten / Tageswechsel
 
-renderSound();
+renderSound(); renderNote(); noteIcon(); setFavicon(0, false);
 loadUsers().then(connect).catch(e => showErr(e.message));
 })();
 </script>
@@ -1013,8 +1173,8 @@ def login_html(error="", firefox=False):
         <p>Firefox sendet den Windows-Benutzer erst, wenn diese Adresse freigegeben ist.
            Einmal pro PC/Benutzer – danach meldet Firefox dich automatisch an.</p>
         <ol>
-          <li><a class="btn dl" href="/firefox-einrichten.reg">Freigabe herunterladen</a></li>
-          <li>Datei <code>netzwerk-chat-firefox.reg</code> doppelklicken → <b>Ja</b> → <b>OK</b>
+          <li><a class="btn dl" href="/einrichten.reg">Freigabe herunterladen</a></li>
+          <li>Datei <code>netzwerk-chat-einrichten.reg</code> doppelklicken → <b>Ja</b> → <b>OK</b>
               <span class="small">(keine Adminrechte nötig)</span></li>
           <li>Firefox komplett schließen und neu starten.</li>
         </ol>

@@ -22,7 +22,7 @@ Die IP-Adresse der Brume 2 im eigenen Netz verwenden (Werkseinstellung: `192.168
 
 **Windows (PowerShell) oder Mac (Terminal):**
 ```
-scp -O NetzwerkChat-v1.4.0-brume2-offline.tar.gz root@192.168.8.1:/tmp/
+scp -O NetzwerkChat-v1.5.0-brume2-offline.tar.gz root@192.168.8.1:/tmp/
 ```
 `-O` ist nötig, weil die Brume 2 nur das klassische SCP-Protokoll kann.
 Alternativ mit **WinSCP** (Protokoll „SCP“) nach `/tmp` kopieren.
@@ -32,7 +32,7 @@ Alternativ mit **WinSCP** (Protokoll „SCP“) nach `/tmp` kopieren.
 ```
 ssh root@192.168.8.1
 cd /tmp
-tar -xzf NetzwerkChat-v1.4.0-brume2-offline.tar.gz
+tar -xzf NetzwerkChat-v1.5.0-brume2-offline.tar.gz
 sh NetzwerkChat-brume2/install.sh
 ```
 
@@ -63,7 +63,8 @@ Edge/Chrome melden den Windows-Benutzer nur automatisch an, wenn die Seite über
 **Namen ohne Punkt** aufgerufen wird (z. B. `http://GL-MT2500:8090`) – dafür muss der Name der
 Brume 2 im Netz auflösbar sein (DNS des Routers). Wird die **IP-Adresse** verwendet, diese
 in Windows unter *Internetoptionen → Sicherheit → Lokales Intranet → Sites → Erweitert* eintragen
-(z. B. `http://192.168.8.1`). Firefox: einmalige Freigabe über die Anmeldeseite (siehe README).
+(z. B. `http://192.168.8.1`). Firefox und Windows-Benachrichtigungen: einmalige Freigabe über die Anmeldeseite bzw. den Button
+**MELDUNG: EINRICHTEN** im Chat (siehe README).
 
 ## Fehlerbehebung
 
